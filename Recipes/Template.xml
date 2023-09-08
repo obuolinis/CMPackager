@@ -64,6 +64,14 @@
 			<FullVersion></FullVersion>
 			<!-- AppRepoFolder - [String] When making multiple deployment Types, this can be used to create separate folders for each deployment type (like x64 and x86 folders)-->
 			<AppRepoFolder></AppRepoFolder>
+			<!-- IsPSADTPackage - [Boolean] Can be used to wrap the Application into a PSADT package. PSADTPath global preference needs to be set for this to work -->
+			<IsPSADTPackage></IsPSADTPackage>
+			<!-- PSADTInstallCmdLine - [String] Optional. Install command line to be injected into PSADT Deploy-Application.ps1 script -->
+			<PSADTInstallCmdLine></PSADTInstallCmdLine>
+			<!-- PSADTUninstallCmdLine - [String] Optional. Uninstall command line to be injected into PSADT Deploy-Application.ps1 script -->
+			<PSADTUninstallCmdLine></PSADTUninstallCmdLine>
+			<!-- PSADTRepairCmdLine - [String] Optional. Repair command line to be injected into PSADT Deploy-Application.ps1 script -->
+			<PSADTRepairCmdLine></PSADTRepairCmdLine>
 			<!-- ExtraCopyFunctions - [String(PowerShell Script Block)] PowerShell Script Block used to copy extra files and folders to the repository, things like MSTs etc. can be saved in the ExtraFiles folder and copied here. 
 			Important Variables:
 			$DestinationPath - The Path to the Repository

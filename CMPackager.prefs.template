@@ -10,6 +10,8 @@
 	<ContentFolderPattern>$ApplicationName\Packages\$Version</ContentFolderPattern>
 	<!-- IconRepo - [String] Repository for Application Icons to be used in software Center -->
 	<IconRepo>\\Server\Share\Apps\Application Icons</IconRepo>
+	<!-- PSADTPath - [String] Optional location of PowerShell App Deployment Toolkit files. Used to support application wrapping into a PSADT package -->
+	<PSADTPath>$ScriptRoot\ExtraFiles\PSADT</PSADTPath>
 	<!-- CMPSModulePath - [String] Path to non-default CM PowerShell Module (e.g. C:\Temp\PSModule\bin). If not specified, look in default console install directory -->
 	<CMPSModulePath></CMPSModulePath>
 	<!-- SCCMSite - [String] SCCM Site Name -->

@@ -80,6 +80,7 @@ process {
 		$Global:ContentLocationRoot = $PackagerPrefs.PackagerPrefs.ContentLocationRoot
 		$Global:ContentFolderPattern = $PackagerPrefs.PackagerPrefs.ContentFolderPattern
 		$Global:IconRepo = $PackagerPrefs.PackagerPrefs.IconRepo
+		$Global:PSADTPath = $PackagerPrefs.PackagerPrefs.PSADTPath.Replace('$ScriptRoot', $ScriptRoot)
 
 		# CM Vars
 		$Global:CMSite = $PackagerPrefs.PackagerPrefs.CMSite
@@ -462,6 +463,7 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 			$DownloadVersionCheck = $Download.DownloadVersionCheck
 			$DownloadFile = "$TempDir\$DownloadFileName"
 			$AppRepoFolder = $Download.AppRepoFolder
+			$IsPSADTPackage = [System.Convert]::ToBoolean($Download.IsPSADTPackage)
 			$ExtraCopyFunctions = $Download.ExtraCopyFunctions
 			$RequireHigherVersion = [System.Convert]::ToBoolean($Download.RequireHigherVersion)
 
@@ -557,6 +559,26 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 				Add-LogContent "Copying downloads to $DestinationPath"
 				Copy-Item -Path $DownloadFile -Destination $DestinationPath -Force
 			
+				## Process PSADT wrapper
+				If ($IsPSADTPackage) {
+					Add-LogContent "Processing PSADT wrapper"
+					$PSADTPathExists = Test-Path $Global:PSADTPath -PathType Container
+					
+					If ($PSADTPathExists) {
+						$InvokePSADTParams = @{
+							AppContentLocation    = $DestinationPath
+							AppSetupFileName      = $DownloadFileName
+							PSADTInstallCmdLine   = $Download.PSADTInstallCmdLine
+							PSADTUninstallCmdLine = $Download.PSADTUninstallCmdLine
+							PSADTRepairCmdLine    = $Download.PSADTRepairCmdLine
+						}
+
+						Invoke-PSADTPackage @InvokePSADTParams
+					}
+					Else {
+						Add-LogContent "ERROR: Path $Global:PSADTPath does not exist - not processed."
+					}
+				}
 				## Extra Copy Functions If Required
 				If (-not ([String]::IsNullOrEmpty($ExtraCopyFunctions))) {
 					Add-LogContent "Performing Extra Copy Functions"
@@ -567,6 +589,58 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 	
 		## Return True if All Downloaded Applications were new Versions
 		Return $NewApp
+	}
+
+	Function Invoke-PSADTPackage {
+		param (
+			[Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()]
+			[string]
+			$AppContentLocation,
+			[Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()]
+			[string]
+			$AppSetupFileName,
+			[Parameter(Mandatory = $false)]
+			[string]
+			$PSADTInstallCmdLine,
+			[Parameter(Mandatory = $false)]
+			[string]
+			$PSADTUninstallCmdLine,
+			[Parameter(Mandatory = $false)]
+			[string]
+			$PSADTRepairCmdLine
+		)
+
+		Copy-Item -Path "$Global:PSADTPath\*" -Destination $AppContentLocation -Recurse -ErrorAction SilentlyContinue
+		Move-Item -Path "$AppContentLocation\$AppSetupFileName" -Destination "$DestinationPath\Files\" -Force
+		
+		## Add PSADT Install/Uninstall/Repair command lines to Deploy-Application.ps1
+		If (-not [String]::IsNullOrEmpty($PSADTInstallCmdLine)) {
+			Add-LogContent "Adding PSADT Install/Uninstall/Repair command lines"
+
+			$PSADTDeployFile = "$AppContentLocation\Deploy-Application.ps1"
+			$SearchPatterns = @{
+				Install   = "Perform Installation tasks here"
+				Uninstall = "Perform Uninstallation tasks here"
+				Repair    = "Perform Repair tasks here"
+			}
+
+			$FileContent = Get-Content $PSADTDeployFile -Encoding UTF8
+			$NewFileContent = @()
+			foreach ($line in $FileContent) {
+				$NewFileContent += $line
+				If ($line -match $SearchPatterns['Install']) {
+					$NewFileContent += "`t`t" + $PSADTInstallCmdLine
+				}
+				Elseif ($line -match $SearchPatterns['Uninstall']) {
+					$NewFileContent += "`t`t" + $PSADTUninstallCmdLine
+				}
+				Elseif ($line -match $SearchPatterns['Repair']) {
+					$NewFileContent += "`t`t" + $PSADTRepairCmdLine
+				}
+			}
+
+			$NewFileContent | Out-File -FilePath $PSADTDeployFile -Encoding utf8 -Force
+		}
 	}
 
 	Function Invoke-ApplicationCreation {
