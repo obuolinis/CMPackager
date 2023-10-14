@@ -567,7 +567,9 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 					If ($PSADTPathExists) {
 						$InvokePSADTParams = @{
 							AppContentLocation    = $DestinationPath
-							AppSetupFileName      = $DownloadFileName
+							PSADTAppVendor        = $ApplicationPublisher
+							PSADTAppName          = $ApplicationName
+							PSADTAppVersion       = $Download.Version
 							PSADTInstallCmdLine   = $Download.PSADTInstallCmdLine
 							PSADTUninstallCmdLine = $Download.PSADTUninstallCmdLine
 							PSADTRepairCmdLine    = $Download.PSADTRepairCmdLine
@@ -579,6 +581,7 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 						Add-LogContent "ERROR: Path $Global:PSADTPath does not exist - not processed."
 					}
 				}
+				
 				## Extra Copy Functions If Required
 				If (-not ([String]::IsNullOrEmpty($ExtraCopyFunctions))) {
 					Add-LogContent "Performing Extra Copy Functions"
@@ -596,9 +599,15 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 			[Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()]
 			[string]
 			$AppContentLocation,
-			[Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()]
+			[Parameter(Mandatory = $false)]
 			[string]
-			$AppSetupFileName,
+			$PSADTAppVendor,
+			[Parameter(Mandatory = $false)]
+			[string]
+			$PSADTAppName,
+			[Parameter(Mandatory = $false)]
+			[string]
+			$PSADTAppVersion,
 			[Parameter(Mandatory = $false)]
 			[string]
 			$PSADTInstallCmdLine,
@@ -610,37 +619,60 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 			$PSADTRepairCmdLine
 		)
 
+		## Copy PSADT files. Move App setup files to Files subfolder
+		$AppSetupFiles = Get-ChildItem -Path $AppContentLocation
 		Copy-Item -Path "$Global:PSADTPath\*" -Destination $AppContentLocation -Recurse -ErrorAction SilentlyContinue
-		Move-Item -Path "$AppContentLocation\$AppSetupFileName" -Destination "$DestinationPath\Files\" -Force
+		$AppSetupFiles | Move-Item -Destination "$AppContentLocation\Files\" -Force -ErrorAction SilentlyContinue
 		
+		## Add PSADT App Name, Vendor, Version, Date and Username to Deploy-Application.ps1
 		## Add PSADT Install/Uninstall/Repair command lines to Deploy-Application.ps1
-		If (-not [String]::IsNullOrEmpty($PSADTInstallCmdLine)) {
+		$PSADTDeployFile = "$AppContentLocation\Deploy-Application.ps1"
+		$PSADTDeployFileContent = Get-Content $PSADTDeployFile -Encoding UTF8
+		
+		if (-not [String]::IsNullOrEmpty($PSADTInstallCmdLine)) {
 			Add-LogContent "Adding PSADT Install/Uninstall/Repair command lines"
 
-			$PSADTDeployFile = "$AppContentLocation\Deploy-Application.ps1"
 			$SearchPatterns = @{
 				Install   = "Perform Installation tasks here"
 				Uninstall = "Perform Uninstallation tasks here"
 				Repair    = "Perform Repair tasks here"
 			}
+		}
 
-			$FileContent = Get-Content $PSADTDeployFile -Encoding UTF8
-			$NewFileContent = @()
-			foreach ($line in $FileContent) {
+		$NewFileContent = @()
+		foreach ($line in $PSADTDeployFileContent) {
+			If ($line -match '\$appVendor =') {
+				$NewFileContent += $line -replace "'.*'", "'$PSADTAppVendor'"
+			}
+			Elseif ($line -match '\$appName =') {
+				$NewFileContent += $line -replace "'.*'", "'$PSADTAppName'"
+			}
+			Elseif ($line -match '\$appVersion =') {
+				$NewFileContent += $line -replace "'.*'", "'$PSADTAppVersion'"
+			}
+			Elseif ($line -match '\$appScriptDate =') {
+				$NewFileContent += $line -replace "'.*'", "'$((Get-Date).ToShortDateString())'"
+			}
+			Elseif ($line -match '\$appScriptAuthor =') {
+				$NewFileContent += $line -replace "'.*'", "'$([Environment]::UserName)'"
+			}
+			Else {
 				$NewFileContent += $line
-				If ($line -match $SearchPatterns['Install']) {
-					$NewFileContent += "`t`t" + $PSADTInstallCmdLine
-				}
-				Elseif ($line -match $SearchPatterns['Uninstall']) {
-					$NewFileContent += "`t`t" + $PSADTUninstallCmdLine
-				}
-				Elseif ($line -match $SearchPatterns['Repair']) {
-					$NewFileContent += "`t`t" + $PSADTRepairCmdLine
+				if (-not [String]::IsNullOrEmpty($PSADTInstallCmdLine)) {
+					If ($line -match $SearchPatterns['Install']) {
+						$NewFileContent += "`t`t" + $PSADTInstallCmdLine
+					}
+					Elseif ($line -match $SearchPatterns['Uninstall']) {
+						$NewFileContent += "`t`t" + $PSADTUninstallCmdLine
+					}
+					Elseif ($line -match $SearchPatterns['Repair']) {
+						$NewFileContent += "`t`t" + $PSADTRepairCmdLine
+					}
 				}
 			}
-
-			$NewFileContent | Out-File -FilePath $PSADTDeployFile -Encoding utf8 -Force
 		}
+
+		$NewFileContent | Out-File -FilePath $PSADTDeployFile -Encoding utf8 -Force
 	}
 
 	Function Invoke-ApplicationCreation {
